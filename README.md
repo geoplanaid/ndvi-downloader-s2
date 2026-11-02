@@ -10,6 +10,7 @@ Unduh **GeoTIFF NDVI komposit bulanan** dari Sentinel-2 untuk setiap area: satu 
 - **Epok per bulan**: setiap bulan dibuat komposit per piksel dari semua citra bulan itu: **Median** (paling tahan sisa awan), **Maksimum/MVC** (kehijauan puncak), atau **Rata-rata**.
 - **Batas luas maksimum** (default 10.000 ha): area yang lebih besar ditandai merah di peta dan dilewati tanpa diunduh.
 - **Masker awan per piksel** dengan Scene Classification Layer (awan, bayangan awan, cirrus, salju dibuang). Bulan yang area bebas awannya di bawah ambang (default 50%) dilewati.
+- **Bulan kosong dicoba ulang otomatis**: kalau suatu bulan tidak punya citra di bawah batas awan scene, atau area bebas awannya kurang, citra yang lebih berawan di bulan yang sama ikut dipakai (awannya tetap dibuang per piksel). Contoh: sawah Karawang Januari 2024 naik dari 0% ke 98% area bebas awan. Bulan yang tetap tertutup awan di semua lintasan dilewati dan dicatat "terlalu berawan ... walau sudah diulang" di CSV.
 - **Tanpa akun dan tanpa API key**: data dari katalog STAC publik [Earth Search](https://earth-search.aws.element84.com/v1) (Element 84, AWS Open Data). Hanya piksel di dalam area yang dibaca dari Cloud-Optimized GeoTIFF.
 - **Lanjutkan proses**: bulan yang filenya sudah ada bisa dilewati, jadi proses yang terputus tinggal dijalankan ulang.
 - **CSV ringkasan** untuk setiap run: status tiap area dan bulan (berhasil, terlalu berawan, tidak ada citra, area terlalu besar), jumlah citra, persen bebas awan, dan NDVI rata-rata.
@@ -29,7 +30,7 @@ Unduh **GeoTIFF NDVI komposit bulanan** dari Sentinel-2 untuk setiap area: satu 
 
 - GeoTIFF float32 satu band, nilai NDVI −1 sampai 1, **nodata −9999** (di luar poligon, atau piksel tanpa observasi bebas awan sepanjang bulan itu).
 - CRS **UTM lokal** area tersebut (mis. EPSG:32748 untuk Jawa Barat, 32750 untuk Kalimantan Timur), grid dikunci ke kelipatan resolusi (10/20/30/60 m).
-- Kompresi DEFLATE. Metadata file berisi nama area, bulan, metode komposit, jumlah citra, persen bebas awan, dan ID citra sumber.
+- Kompresi DEFLATE. Metadata file berisi nama area, bulan, metode komposit, jumlah citra, persen bebas awan, `CLOUDY_FALLBACK` (YES bila bulan itu diselamatkan dengan citra berawan), dan ID citra sumber.
 
 ## Instalasi
 
@@ -54,7 +55,7 @@ Kebutuhan: QGIS 3.22 atau lebih baru. Tidak ada dependensi tambahan.
 |---|---|
 | Fase tanam padi/jagung per bulan | Komposit **Median**, 10 m, sertakan piksel air |
 | Kehijauan puncak / biomassa | Komposit **Maksimum (MVC)** |
-| Wilayah sangat berawan (Kalimantan, Papua, musim hujan) | *Awan scene maks* 90 %, *Area bebas awan min* 30 % |
+| Wilayah sangat berawan (Kalimantan, Papua, musim hujan) | Biarkan *coba ulang* aktif; turunkan *Area bebas awan min* ke 30 % bila tetap butuh file |
 | Banyak area atau area luas | Resolusi 20–30 m, naikkan batas luas seperlunya |
 
 Sebagai gambaran, 2 area kecil (±40 ha) × 3 bulan selesai sekitar 1 menit. Waktu proses kira-kira sebanding dengan jumlah citra (±0,7 detik per citra per area kecil dengan koneksi rumahan).
@@ -65,12 +66,13 @@ Sebagai gambaran, 2 area kecil (±40 ha) × 3 bulan selesai sekitar 1 menit. Wak
 untuk setiap area:
   luas (ha, di UTM lokal) > batas?  ──► lewati, catat di ringkasan
   grid UTM lokal, dikunci ke resolusi ──► masker poligon
-  STAC search Earth Search per tahun (filter awan scene)
+  STAC search Earth Search per tahun (sekali; citra di atas batas awan disimpan sebagai cadangan)
   buang item tanpa COG publik + duplikat; per tanggal cukup 1 tile bila sudah menutupi area
   untuk setiap bulan:
-    tiap citra: warp B04, B08, SCL ke grid ──► masker SCL ──► NDVI (NaN jika berawan)
+    tiap citra (awan scene <= batas): warp B04, B08, SCL ke grid ──► masker SCL ──► NDVI (NaN jika berawan)
     komposit per piksel (median / max / mean)
-    % area bebas awan < ambang? ──► lewati
+    % area bebas awan < ambang? ──► coba ulang: tambahkan citra di atas batas awan, komposit lagi
+    masih < ambang? ──► lewati, catat di ringkasan
     tulis GeoTIFF
 ```
 

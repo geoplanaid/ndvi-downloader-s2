@@ -9,14 +9,14 @@ email=geoplana.id@gmail.com
 about=Draw an area or use a polygon layer (every feature is one area, named from a field of your choice) and the plugin writes one NDVI GeoTIFF per area per month.
     Each month is a per-pixel composite (median, maximum/MVC or mean) of every Sentinel-2 L2A scene of that month, with clouds, cloud shadows and cirrus masked using the Scene Classification Layer.
     Scenes come from the public Earth Search STAC catalogue (Element 84 / AWS Open Data): no account, API key or Google Earth Engine login needed, and only the pixels inside each area are read.
-    Areas larger than the configured maximum are skipped, months with too little cloud-free coverage are skipped, existing files can be skipped to resume a run, and a CSV report lists every area and month.
+    Areas larger than the configured maximum are skipped. A month with no scene under the cloud limit (or too little clear coverage) is retried with the cloudier scenes of that month, still masked per pixel; months that stay cloudy are skipped, existing files can be skipped to resume a run, and a CSV report lists every area and month.
     Output: float32 GeoTIFF in the local UTM zone at 10/20/30/60 m, clipped to the polygon, nodata -9999. Interface in Bahasa Indonesia.
 
 tracker=https://github.com/geoplanaid/ndvi-downloader-s2/issues
 repository=https://github.com/geoplanaid/ndvi-downloader-s2
 homepage=https://geoplanaid.github.io
 
-changelog=0.1.0 - First release: monthly median/MVC/mean NDVI composites per area, max-area skip, coverage filter, resume, CSV report, auto styling.
+changelog=0.1.0 - First release: monthly median/MVC/mean NDVI composites per area, max-area skip, coverage filter with automatic retry on cloudy scenes, resume, CSV report, auto styling.
 
 tags=ndvi,sentinel-2,sentinel,download,monthly,composite,vegetation,agriculture,deforestation,remote sensing,stac,cog
 category=Raster

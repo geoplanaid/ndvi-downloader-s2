@@ -151,6 +151,14 @@ class NdviDownloaderDock(QDockWidget):
         self.spin_cov.setSuffix(" %")
         self.spin_cov.setToolTip("Bulan dilewati jika bagian area yang bebas awan kurang dari ini")
         lt.addRow("Area bebas awan min", self.spin_cov)
+        self.chk_retry = QCheckBox("Bulan kosong/berawan: coba ulang dengan citra di atas batas awan")
+        self.chk_retry.setToolTip(
+            "Jika suatu bulan tidak punya citra di bawah batas awan scene, atau area bebas awannya kurang,
+"
+            "citra yang lebih berawan di bulan yang sama ikut dipakai. Awan tetap dibuang per piksel,
+"
+            "jadi hanya bagian yang cerah yang terpakai.")
+        lt.addRow(self.chk_retry)
         self.chk_water = QCheckBox("Sertakan piksel air (sawah tergenang, tambak)")
         lt.addRow(self.chk_water)
         root.addWidget(box_time)
@@ -233,6 +241,7 @@ class NdviDownloaderDock(QDockWidget):
         self.spin_cov.setValue(int(s.value(SETTINGS_PREFIX + "min_coverage", 50)))
         self.spin_max_ha.setValue(int(s.value(SETTINGS_PREFIX + "max_area_ha", 10_000)))
         self.chk_water.setChecked(s.value(SETTINGS_PREFIX + "water", True, type=bool))
+        self.chk_retry.setChecked(s.value(SETTINGS_PREFIX + "retry_cloudy", True, type=bool))
         self.chk_skip.setChecked(s.value(SETTINGS_PREFIX + "skip_existing", True, type=bool))
         self.chk_add.setChecked(s.value(SETTINGS_PREFIX + "add_to_map", True, type=bool))
         self.cmb_method.setCurrentIndex(int(s.value(SETTINGS_PREFIX + "method", 0)))
@@ -246,6 +255,7 @@ class NdviDownloaderDock(QDockWidget):
         s.setValue(SETTINGS_PREFIX + "min_coverage", self.spin_cov.value())
         s.setValue(SETTINGS_PREFIX + "max_area_ha", self.spin_max_ha.value())
         s.setValue(SETTINGS_PREFIX + "water", self.chk_water.isChecked())
+        s.setValue(SETTINGS_PREFIX + "retry_cloudy", self.chk_retry.isChecked())
         s.setValue(SETTINGS_PREFIX + "skip_existing", self.chk_skip.isChecked())
         s.setValue(SETTINGS_PREFIX + "add_to_map", self.chk_add.isChecked())
         s.setValue(SETTINGS_PREFIX + "method", self.cmb_method.currentIndex())
@@ -400,6 +410,7 @@ class NdviDownloaderDock(QDockWidget):
             max_area_ha=self.spin_max_ha.value(),
             valid_scl=tuple(valid_scl),
             skip_existing=self.chk_skip.isChecked(),
+            retry_cloudy=self.chk_retry.isChecked(),
         )
         self.task = NdviDownloadTask([a for a, _ in self.areas], settings)
         self.task.progressChanged.connect(lambda v: self.progress.setValue(int(v)))
@@ -430,9 +441,11 @@ class NdviDownloaderDock(QDockWidget):
         except OSError as exc:
             report = f"(gagal ditulis: {exc})"
         counts = Counter(r.status for r in results)
+        n_retried = sum(1 for r in results if r.status == "ok" and r.retried)
         skipped_areas = sorted({r.area for r in results if r.status == "too_large"})
         lines = [
-            f"=== Selesai: {counts['ok']} GeoTIFF dibuat",
+            f"=== Selesai: {counts['ok']} GeoTIFF dibuat"
+            + (f" ({n_retried} di antaranya diselamatkan dengan citra berawan)" if n_retried else ""),
             f"    sudah ada: {counts['exists']}, terlalu berawan: {counts['low_coverage']}, "
             f"tidak ada citra: {counts['no_scenes']}, error: {counts['error']}, dibatalkan: {counts['canceled']}",
         ]
